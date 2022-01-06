@@ -1,0 +1,149 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from torchvision import models, transforms
+from tqdm import tqdm
+
+#data load
+trans = transforms.Compose([transforms.Resize((299,299)),
+                            transforms.ToTensor(),
+                            transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
+
+trans_train = transforms.Compose([transforms.Resize((299,299)),
+                            # transforms.RandomHorizontalFlip(p=0.5),
+                            # transforms.RandomRotation(degrees=(-90, 90)),
+                            # transforms.RandomVerticalFlip(p=0.5),
+                            transforms.ToTensor(),
+                            transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
+
+
+#model load
+def save_checkpoint(model, filename):
+    torch.save(model, filename)
+
+
+train_set = torchvision.datasets.ImageFolder(root = 'C:/kvasir/train', transform = trans_train)
+test_set = torchvision.datasets.ImageFolder(root = 'C:/kvasir/val', transform = trans)
+
+trainloader = DataLoader(train_set, batch_size=64, shuffle=True)
+testloader = DataLoader(test_set, batch_size=64, shuffle=True)
+classes = train_set.classes
+
+model = models.inception_v3(pretrained=True)
+
+model.AuxLogits.fc = nn.Linear(768, 8)
+model.fc = nn.Linear(2048, 8)
+
+writer = SummaryWriter('4class_Inception_RMSprop')
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+net = model.to(device)
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.RMSprop(net.parameters(),lr=0.0001)
+
+#scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0)
+
+#train
+h_acc = 0
+n=300
+for epoch in range(n):
+    loop = tqdm(enumerate(trainloader), total=len(trainloader))
+    total_loss = 0
+    total_correct = 0
+    net.train()
+    net.aux_logits = True
+    for i, data in loop:
+        inputs, labels = data
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        optimizer.zero_grad()
+        outputs, aux_outputs = net(inputs)   #원본 : outputs = net(inputs)
+
+        loss1 = criterion(outputs, labels)  #추가
+        loss2 = criterion(aux_outputs, labels)     #추가
+
+        loss = loss1 + 0.4 * loss2    #원본: loss = criterion(outputs,labels)
+        loss.backward()
+        optimizer.step()
+        _, predicted = torch.max(outputs, 1)    #원본: _, predicted = torch.max(outputs, 1)
+
+        train_loss = loss.item()
+        train_correct = torch.sum(predicted == labels.data).item()
+
+        loop.set_description(f"Epoch [{epoch + 1}/{n}]")
+        loop.set_postfix(loss=train_loss, acc=train_correct / len(labels))
+
+        total_loss += train_loss
+        total_correct += train_correct
+
+    scheduler.step()
+
+    e_loss = total_loss / len(train_set)
+    e_acc = total_correct / len(train_set)
+
+    writer.add_scalar('train loss',
+                      e_loss,
+                      epoch + 1)
+    writer.add_scalar('train acc',
+                      e_acc,
+                      epoch + 1)
+
+    if epoch % 2 == 0:
+        class_correct = list(0. for i in range(8))
+        class_total = list(0. for i in range(8))
+        net.eval()
+        net.aux_logits = False
+        with torch.no_grad():
+            total_loss = 0
+            total_correct = 0
+            loop = tqdm(enumerate(testloader), total=len(testloader))
+            for i, data in loop:
+                inputs, labels = data
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
+                outputs = net(inputs)
+                loss = criterion(outputs, labels)
+                _, predicted = torch.max(outputs,1)
+                c = (predicted == labels).squeeze()
+
+                test_loss = loss.item()
+                test_correct = torch.sum(predicted == labels.data).item()
+
+                total_loss += test_loss
+                total_correct += test_correct
+
+                for i in range(len(labels)):
+                    label = labels[i]
+                    class_correct[label] += c[i].item()
+                    class_total[label] += 1
+
+                for i in range(8):
+                    if class_total[i] != 0:
+                        writer.add_scalar(f'{classes[i]}',
+                                          class_correct[i] / class_total[i],
+                                          epoch + 1)
+
+        e_loss = total_loss / len(test_set)
+        e_acc = total_correct / len(test_set)
+
+        writer.add_scalar('test loss',
+                          e_loss,
+                          epoch + 1)
+        writer.add_scalar('test acc',
+                          e_acc,
+                          epoch + 1)
+        if h_acc <= e_acc:
+            save_checkpoint(net, f'best_Inception-{epoch}.pth')
+            h_acc = e_acc
+writer.flush()
+writer.close()
+print('Finished Training')
+print('Final_Original_inception Acc :',h_acc)
+
