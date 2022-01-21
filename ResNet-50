@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import models, transforms
 from tqdm import tqdm
-# v1 = pretrain=False, data augmentation=False v2 = pretrain=True, data augmentation=False v3 = pretraion=False, data augmentation=True, v4 = pretraion=True, data augmentation=True
+
 #data load
 trans = transforms.Compose([transforms.Resize((224,224)),
                             transforms.ToTensor(),
@@ -19,29 +19,35 @@ trans_train = transforms.Compose([transforms.Resize((224,224)),
                             transforms.ToTensor(),
                             transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
 
+
 #model load
 def save_checkpoint(model, filename):
     torch.save(model, filename)
 
 
+# New_Resnet_RMSprop
 train_set = torchvision.datasets.ImageFolder(root = 'C:/kvasir/train', transform = trans_train)
 test_set = torchvision.datasets.ImageFolder(root = 'C:/kvasir/val', transform = trans)
+
+print("Final_Original_ResNet50")
 
 trainloader = DataLoader(train_set, batch_size=64, shuffle=True)
 testloader = DataLoader(test_set, batch_size=64, shuffle=True)
 classes = train_set.classes
 
-model = models.densenet121(pretrained=True)
+model = models.resnet50(pretrained=True)
 
-model.classifier = nn.Linear(1024, 8)
+num_classes = 8
+num_ftrs = model.fc.in_features
+model.fc = nn.Linear(num_ftrs, num_classes)
 
-writer = SummaryWriter('Final_Original_Densenet121')
+writer = SummaryWriter('Original_ResNet50')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 net = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(net.parameters(),lr=0.0001)
+optimizer = optim.RMSprop(net.parameters(),lr=0.0001)
 
 #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=0)
@@ -133,10 +139,10 @@ for epoch in range(n):
                           e_acc,
                           epoch + 1)
         if h_acc <= e_acc:
-            save_checkpoint(net, f'Final_Original_best_Densenet121-{epoch}.pth')
+            save_checkpoint(net, f'Best_resnet50-{epoch}.pth')
             h_acc = e_acc
 writer.flush()
 writer.close()
 print('Finished Training')
-print('Final_Original_Best Dense121 Acc :',h_acc)
+print('Best resnet50 Acc :',h_acc)
 
