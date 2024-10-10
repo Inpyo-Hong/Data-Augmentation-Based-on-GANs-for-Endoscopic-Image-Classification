@@ -9,8 +9,13 @@ The incidence of cancer among modern people has recently increased due to variou
 ![image](https://github.com/user-attachments/assets/8faa2687-3b19-47f1-8176-e581e9a9671d)
 
 ## Experimental Results
-Top-1 accuracy comparison.
+Top-1 performance comparison.
 ![image](https://github.com/user-attachments/assets/f56442a7-35b4-4918-b840-7cac4ba9db89)
+
+Top-1 performance comparison with state-of-the-art
+![image](https://github.com/user-attachments/assets/7b9afca1-e388-4fa4-8e52-8955faed1875)
+
+
 
 ## cite
 
