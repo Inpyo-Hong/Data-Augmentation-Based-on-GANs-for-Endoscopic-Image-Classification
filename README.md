@@ -17,8 +17,8 @@ Top-1 performance comparison with state-of-the-art
 
 
 
-## cite
-
+## Citation
+If you find the project codes useful for your research, please consider citing.
 ```
 @article{park2023data,
   title={Data augmentation based on generative adversarial networks for endoscopic image classification},
